@@ -1,0 +1,129 @@
+/* --- 0. LEAFLET MAP STYLES --- */
+@import 'leaflet/dist/leaflet.css';
+
+/* --- 1. MODERN VARIABLES (Zomato-ish Theme) --- */
+:root {
+  --primary: #e23744;       
+  --primary-hover: #d32f2f;
+  --secondary: #2d2d2d;     
+  --bg-color: #f8f9fa;      
+  --white: #ffffff;
+  --green: #2ecc71;         
+  --orange: #f39c12;        
+  --blue: #3498db;         
+  --shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  --radius: 12px;
+  --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Global Reset to prevent layout issues */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  font-family: var(--font-main);
+  color: var(--secondary);
+  
+  display: block; 
+  place-items: start;
+  min-width: 100%;
+}
+
+
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left; 
+}
+
+/* --- 2. LAYOUT UTILITIES --- */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 25px;
+}
+
+/* --- 3. COMPONENTS: CARDS --- */
+.card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  transition: transform 0.2s ease;
+  border: 1px solid #eee;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+}
+
+/* --- 4. COMPONENTS: BUTTONS --- */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: 0.2s;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+
+.btn-outline { background: transparent; border: 2px solid var(--secondary); color: var(--secondary); }
+.btn-outline:hover { background: var(--secondary); color: white; }
+
+.btn-success { background: var(--green); color: white; }
+.btn-block { width: 100%; }
+
+/* --- 5. COMPONENT: NAVBAR --- */
+.navbar {
+  background: var(--white);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  padding: 15px 30px;
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000; 
+}
+
+.logo { 
+  font-size: 24px; 
+  font-weight: 800; 
+  color: var(--primary); 
+  letter-spacing: -1px; 
+  cursor: pointer;
+}
+
+.nav-links button {
+  margin-left: 20px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #555;
+  cursor: pointer;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+.nav-links button:hover { color: var(--primary); }
+
+/* --- 6. STATUS BADGES --- */
+.badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; color: white;}
+.bg-orange { background: var(--orange); }
+.bg-blue { background: var(--blue); }
+.bg-green { background: var(--green); }
+.bg-gray { background: #95a5a6; }
