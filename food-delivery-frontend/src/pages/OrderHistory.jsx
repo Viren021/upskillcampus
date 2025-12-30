@@ -6,20 +6,42 @@ function OrderHistory() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        const res = await axios.get('http://127.0.0.1:8000/orders/my-orders', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        setOrders(res.data)
-      } catch (error) {
-        console.error(error)
-      } finally {
-        setLoading(false)
-      }
+  // 1. Fetch Orders
+  const fetchOrders = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await axios.get('http://127.0.0.1:8000/orders/my-orders', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setOrders(res.data)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // 2. 👇 NEW: DELETE LOGIC
+  const handleDelete = async (orderId) => {
+    if(!window.confirm("Are you sure you want to delete this order from your history?")) return;
+
+    try {
+        const token = localStorage.getItem('token')
+        // Call the new backend endpoint we made
+        await axios.delete(`http://127.0.0.1:8000/orders/${orderId}/customer`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        
+        // Remove from list instantly
+        setOrders(orders.filter(o => o.id !== orderId))
+        alert("🗑️ Order deleted.")
+    } catch (error) {
+        console.error(error)
+        alert("Could not delete order.")
+    }
+  }
+
+  useEffect(() => {
     fetchOrders()
   }, [])
 
@@ -40,7 +62,7 @@ function OrderHistory() {
         ) : (
             <div style={{ display: 'grid', gap: '15px' }}>
                 {orders.map(order => (
-                    <div key={order.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={order.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px' }}>
                         
                         {/* Left: Restaurant Info */}
                         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
@@ -58,15 +80,28 @@ function OrderHistory() {
                             </div>
                         </div>
 
-                        {/* Right: Price & Status */}
-                        <div style={{ textAlign: 'right' }}>
-                            <h3 style={{ margin: '0 0 5px 0' }}>₹{order.total_amount}</h3>
-                            <span className={`badge ${
-                                order.status === 'DELIVERED' ? 'bg-green' : 
-                                order.status === 'PENDING' ? 'bg-orange' : 'bg-blue'
-                            }`}>
-                                {order.status}
-                            </span>
+                        {/* Right: Price, Status & DELETE */}
+                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+                            <div>
+                                <h3 style={{ margin: '0 0 5px 0' }}>₹{order.total_amount}</h3>
+                                <span className={`badge ${
+                                    order.status === 'DELIVERED' ? 'bg-green' : 
+                                    order.status === 'PENDING' ? 'bg-orange' : 'bg-blue'
+                                }`}>
+                                    {order.status}
+                                </span>
+                            </div>
+
+                            {/* 👇 NEW: DELETE BUTTON (Only shows if completed) */}
+                            {(order.status === 'DELIVERED' || order.status === 'CANCELLED') && (
+                                <button 
+                                    onClick={() => handleDelete(order.id)}
+                                    className="btn btn-outline-danger btn-sm"
+                                    style={{ fontSize: '12px', padding: '5px 10px' }}
+                                >
+                                    🗑️ Delete
+                                </button>
+                            )}
                         </div>
 
                     </div>

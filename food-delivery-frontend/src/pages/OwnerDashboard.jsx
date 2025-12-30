@@ -43,7 +43,6 @@ function OwnerDashboard() {
       setLoading(false)
       
       if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-          //  FIX: Clear only Auth data, keep Cart
           localStorage.removeItem('token')
           localStorage.removeItem('role')
           window.location.href = '/login'
@@ -73,11 +72,28 @@ function OwnerDashboard() {
       }
   }
 
+  // 👇 NEW: DELETE ORDER FUNCTION
+  const handleDeleteOrder = async (orderId) => {
+    if(!window.confirm("⚠️ Are you sure you want to delete this order record? This cannot be undone.")) return;
+
+    try {
+        const token = localStorage.getItem('token')
+        await axios.delete(`http://127.0.0.1:8000/orders/${orderId}/owner`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        
+        // Remove from UI instantly
+        setOrders(orders.filter(o => o.id !== orderId))
+        alert("🗑️ Order record deleted.")
+    } catch (error) {
+        console.error(error)
+        alert("Failed to delete order. It might still be active.")
+    }
+  }
   
   const handleLogout = () => {
       localStorage.removeItem('token')
       localStorage.removeItem('role')
-      // NOTE: We do NOT remove 'cart' here.
       navigate('/login')
   }
 
@@ -100,7 +116,6 @@ function OwnerDashboard() {
                 <p style={{ color: '#666', margin: 0 }}>Managing: <strong>{stats?.restaurant || "Loading..."}</strong></p>
             </div>
             
-            {/* Added Explicit Logout Button Here as well for convenience */}
             <button 
                 onClick={handleLogout}
                 className="btn"
@@ -163,7 +178,9 @@ function OwnerDashboard() {
                 </div>
 
                 {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    
+                    {/* Workflow Buttons */}
                     {order.status === 'PENDING' && (
                     <button className="btn btn-success" onClick={() => handleStatusChange(order.id, 'PREPARING')}>
                         ✅ Accept
@@ -184,6 +201,17 @@ function OwnerDashboard() {
                         Completed ✨
                     </span>
                     )}
+
+                    {/* 👇 NEW: DELETE BUTTON (Visible for ALL orders) */}
+                    <button 
+                        className="btn btn-sm btn-outline-danger" 
+                        onClick={() => handleDeleteOrder(order.id)}
+                        title="Delete Order Record"
+                        style={{ marginLeft: '10px', padding: '8px 12px' }}
+                    >
+                        🗑️
+                    </button>
+
                 </div>
 
                 </div>

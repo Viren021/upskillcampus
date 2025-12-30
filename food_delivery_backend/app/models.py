@@ -93,6 +93,9 @@ class Order(Base):
     delivery_latitude = Column(Float, nullable=True)
     delivery_longitude = Column(Float, nullable=True)
     delivery_location = Column(Geometry('POINT', srid=4326), nullable=True)
+    delivery_otp = Column(String, nullable=True)
+    visible_to_customer = Column(Boolean, default=True)
+    visible_to_owner = Column(Boolean, default=True)
 
     customer = relationship("User", back_populates="orders")
     restaurant = relationship("Restaurant", back_populates="orders")

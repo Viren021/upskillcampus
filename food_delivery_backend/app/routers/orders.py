@@ -1,4 +1,5 @@
 
+import random
 import razorpay
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,14 +9,15 @@ from typing import List
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
+# Note: We don't need 'delete' import anymore because we are updating, not deleting rows.
 
+# Internal Imports
 from .. import models, schemas, database
 from app import auth  
 from app.socket_manager import manager
 from app.utils import send_sms  
 
 # --- CONFIGURATION ---
-#  REPLACE THESE WITH YOUR REAL KEYS
 RAZORPAY_KEY_ID = "use_your_razorpay_key_id"
 RAZORPAY_KEY_SECRET = "use_your_razorpay_key_secret"
 
@@ -46,7 +48,7 @@ async def initiate_payment(
     if total_amount == 0:
         raise HTTPException(status_code=400, detail="Order total cannot be zero")
 
-    # Create Razorpay Order ID (Amount in Paisa)
+    # Create Razorpay Order ID
     data = { "amount": int(total_amount * 100), "currency": "INR", "receipt": "order_receipt" }
     try:
         payment = client.order.create(data=data)
@@ -61,7 +63,7 @@ async def initiate_payment(
     }
 
 # -----------------------------------------------------------------------------
-# 2. VERIFY & SAVE (Now with LOCATION 📍)
+# 2. VERIFY & SAVE
 # -----------------------------------------------------------------------------
 @router.post("/verify")
 async def verify_payment(
@@ -97,14 +99,13 @@ async def verify_payment(
                 )
                 order_items_objects.append(new_order_item)
 
-        #  C. HANDLE LOCATION (Convert Lat/Lon to Geometry)
+        # C. HANDLE LOCATION
         lat = order_data.get('delivery_latitude')
         lon = order_data.get('delivery_longitude')
         address = order_data.get('delivery_address')
 
         delivery_geom = None
         if lat and lon:
-            # Create WKT Point string for PostGIS
             delivery_geom = f"POINT({lon} {lat})"
 
         # D. Create Order Object
@@ -114,16 +115,19 @@ async def verify_payment(
             total_amount=total_amount,
             status=models.OrderStatus.PENDING,
             stripe_payment_id=payment_data['razorpay_payment_id'],
-
-            #  SAVE ALL FIELDS
+            
             delivery_address=address,
             delivery_location=delivery_geom,
-            delivery_latitude=lat,   
-            delivery_longitude=lon   
+            delivery_latitude=lat,    
+            delivery_longitude=lon,
+            
+            # Default visibility (Visible to both initially)
+            visible_to_customer=True,
+            visible_to_owner=True
         )
 
         db.add(new_order)
-        await db.flush() # Generate ID
+        await db.flush() 
 
         for obj in order_items_objects:
             obj.order_id = new_order.id
@@ -136,7 +140,6 @@ async def verify_payment(
     except Exception as e:
         print(f"❌ DB Save Failed: {e}. Refund Initiated...")
         await db.rollback()
-        # Attempt Refund
         try:
             client.payment.refund(payment_data['razorpay_payment_id'], {
                 "amount": int(total_amount * 100)
@@ -148,7 +151,7 @@ async def verify_payment(
         raise HTTPException(status_code=500, detail="Order Failed. Refund Initiated.")
 
 # -----------------------------------------------------------------------------
-# 3. OWNER: UPDATE STATUS (With SMS & WebSockets)
+# 3. OWNER: UPDATE STATUS
 # -----------------------------------------------------------------------------
 @router.patch("/{order_id}/status", response_model=schemas.OrderOut)
 async def update_order_status(
@@ -157,7 +160,6 @@ async def update_order_status(
     current_user: models.User = Depends(auth.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
-    # Fetch Order + Restaurant + Customer (for Phone #)
     result = await db.execute(
         select(models.Order)
         .filter(models.Order.id == order_id)
@@ -171,7 +173,6 @@ async def update_order_status(
     if not order: 
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Verify Owner
     if not order.restaurant or order.restaurant.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -181,10 +182,10 @@ async def update_order_status(
         await db.commit()
         await db.refresh(order)
 
-        #  Broadcast to Live Map
+        # Broadcast
         await manager.broadcast({"status": str(order.status.value)})
 
-        #  Send SMS Notification
+        # SMS Notification
         customer_phone = order.customer.phone_number 
         restaurant_name = order.restaurant.name
 
@@ -206,7 +207,7 @@ async def update_order_status(
         raise HTTPException(status_code=400, detail="Invalid status")
 
 # -----------------------------------------------------------------------------
-# 4. OWNER: GET ALL ORDERS
+# 4. OWNER: GET ALL ORDERS (👁️ FILTERED)
 # -----------------------------------------------------------------------------
 @router.get("/owner/orders", response_model=List[schemas.OrderOut])
 async def get_owner_orders(
@@ -224,10 +225,10 @@ async def get_owner_orders(
     if not restaurant:
         return []
 
-    # Fetch Orders (Eager Load Restaurant to prevent errors)
     result = await db.execute(
         select(models.Order)
         .where(models.Order.restaurant_id == restaurant.id)
+        .where(models.Order.visible_to_owner == True) # 👈 ONLY SHOW IF NOT DELETED BY OWNER
         .order_by(models.Order.created_at.desc())
         .options(selectinload(models.Order.restaurant)) 
     )
@@ -314,7 +315,7 @@ async def get_my_latest_order(
     return order
 
 # -----------------------------------------------------------------------------
-# 7. CUSTOMER: GET ALL PAST ORDERS
+# 7. CUSTOMER: GET ALL PAST ORDERS (👁️ FILTERED)
 # -----------------------------------------------------------------------------
 @router.get("/my-orders", response_model=List[schemas.OrderOut])
 async def get_my_orders(
@@ -324,7 +325,127 @@ async def get_my_orders(
     result = await db.execute(
         select(models.Order)
         .filter(models.Order.customer_id == current_user.id)
+        .filter(models.Order.visible_to_customer == True) # 👈 ONLY SHOW IF NOT DELETED BY CUSTOMER
         .order_by(models.Order.created_at.desc())
         .options(selectinload(models.Order.restaurant))
     )
     return result.scalars().all()
+
+
+# -----------------------------------------------------------------------------
+# 8. GENERATE OTP
+# -----------------------------------------------------------------------------
+@router.post("/{order_id}/generate-otp")
+async def generate_delivery_otp(
+    order_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    result = await db.execute(
+        select(models.Order)
+        .filter(models.Order.id == order_id)
+        .options(selectinload(models.Order.customer)) 
+    )
+    order = result.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    otp_code = str(random.randint(1000, 9999))
+    order.delivery_otp = otp_code
+    await db.commit()
+
+    customer_phone = order.customer.phone_number
+    
+    if customer_phone:
+        print(f"📤 Sending Real SMS to {customer_phone}...")
+        send_sms(customer_phone, f"Your Food Delivery OTP is: {otp_code}")
+    else:
+        print("⚠️ Error: Customer has no phone number in DB")
+
+    return {"message": "OTP sent to your registered mobile number."}
+
+# -----------------------------------------------------------------------------
+# 9. VERIFY OTP
+# -----------------------------------------------------------------------------
+@router.post("/{order_id}/complete-delivery")
+async def complete_delivery_with_otp(
+    order_id: int,
+    otp_payload: dict,
+    db: AsyncSession = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    result = await db.execute(select(models.Order).filter(models.Order.id == order_id))
+    order = result.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    input_otp = otp_payload.get("otp")
+
+    if order.delivery_otp != input_otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP. Please try again.")
+
+    order.status = models.OrderStatus.DELIVERED
+    await db.commit()
+    await db.refresh(order)
+
+    await manager.broadcast({"status": "DELIVERED"})
+
+    return {"status": "success", "message": "Order Delivered Successfully!"}
+
+
+# -----------------------------------------------------------------------------
+# 10. DELETE ORDER (CUSTOMER) - 👻 SOFT DELETE
+# -----------------------------------------------------------------------------
+@router.delete("/{order_id}/customer")
+async def delete_order_customer(
+    order_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    result = await db.execute(select(models.Order).filter(models.Order.id == order_id))
+    order = result.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.customer_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if order.status not in [models.OrderStatus.DELIVERED, models.OrderStatus.CANCELLED]:
+        raise HTTPException(status_code=400, detail="Cannot delete active orders.")
+
+    # 👇 JUST HIDE IT
+    order.visible_to_customer = False
+    
+    await db.commit()
+    return {"status": "success", "message": "Order removed from history"}
+
+# -----------------------------------------------------------------------------
+# 11. DELETE ORDER (OWNER) - 👻 SOFT DELETE
+# -----------------------------------------------------------------------------
+@router.delete("/{order_id}/owner")
+async def delete_order_owner(
+    order_id: int,
+    db: AsyncSession = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    result = await db.execute(
+        select(models.Order)
+        .filter(models.Order.id == order_id)
+        .options(selectinload(models.Order.restaurant))
+    )
+    order = result.scalars().first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if not order.restaurant or order.restaurant.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # 👇 JUST HIDE IT
+    order.visible_to_owner = False
+    
+    await db.commit()
+    return {"status": "success", "message": "Order removed from dashboard"}

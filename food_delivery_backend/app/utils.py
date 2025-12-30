@@ -13,6 +13,7 @@ def verify(plain_password, hashed_password):
 
 # --- 2. SMS NOTIFICATIONS (New Addition) ---
 
+
 TWILIO_SID = "use_your_twilio_sid"
 TWILIO_AUTH_TOKEN = "use_your_twilio_auth_token"
 TWILIO_PHONE_NUMBER = "+use_your_twilio_phone_number" 
