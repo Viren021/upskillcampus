@@ -6,6 +6,7 @@ import enum
 from datetime import datetime
 from geoalchemy2.shape import to_shape
 
+# --- ENUMS ---
 class UserRole(str, enum.Enum):
     CUSTOMER = "CUSTOMER"
     OWNER = "OWNER"      
@@ -19,24 +20,21 @@ class OrderStatus(str, enum.Enum):
     DELIVERED = "DELIVERED"
     CANCELLED = "CANCELLED"
 
+# --- USERS ---
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    
-    # Matches 'hashed_password' in users.py
     hashed_password = Column(String, nullable=False) 
-    
-    # Matches 'phone_number' in users.py
     phone_number = Column(String, nullable=True) 
-    
     role = Column(Enum(UserRole), default=UserRole.CUSTOMER)
     is_active = Column(Boolean, default=True)
 
     restaurant = relationship("Restaurant", back_populates="owner", uselist=False)
     orders = relationship("Order", back_populates="customer")
 
+# --- RESTAURANTS ---
 class Restaurant(Base):
     __tablename__ = "restaurants"
 
@@ -63,7 +61,7 @@ class Restaurant(Base):
     orders = relationship("Order", back_populates="restaurant")
 
 
-
+# --- MENU ITEMS (Updated) ---
 class MenuItem(Base):
     __tablename__ = "menu_items"
 
@@ -73,10 +71,15 @@ class MenuItem(Base):
     description = Column(String)
     price = Column(Integer)
     is_available = Column(Boolean, default=True)
+    
+    # 👇 FIXED: Added these columns
     image_url = Column(String, nullable=True)
+    category = Column(String, default="Fast Food") 
 
     restaurant = relationship("Restaurant", back_populates="menu_items")
 
+
+# --- ORDERS ---
 class Order(Base):
     __tablename__ = "orders"
 
@@ -89,10 +92,13 @@ class Order(Base):
     total_amount = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Delivery & Location Info
     delivery_address = Column(String, nullable=True)
     delivery_latitude = Column(Float, nullable=True)
     delivery_longitude = Column(Float, nullable=True)
     delivery_location = Column(Geometry('POINT', srid=4326), nullable=True)
+    
+    # New Features
     delivery_otp = Column(String, nullable=True)
     visible_to_customer = Column(Boolean, default=True)
     visible_to_owner = Column(Boolean, default=True)

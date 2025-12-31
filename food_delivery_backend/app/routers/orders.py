@@ -9,7 +9,7 @@ from typing import List
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
-# Note: We don't need 'delete' import anymore because we are updating, not deleting rows.
+from pydantic import BaseModel  # 👈 Added for Driver Update
 
 # Internal Imports
 from .. import models, schemas, database
@@ -27,6 +27,14 @@ router = APIRouter(
     prefix="/orders",
     tags=["Orders"]
 )
+
+# --- DRIVER UPDATE SCHEMA ---
+class DriverUpdate(BaseModel):
+    latitude: float
+    longitude: float
+    distance_text: str 
+    time_text: str     
+    message: str       
 
 # -----------------------------------------------------------------------------
 # 1. INITIATE PAYMENT
@@ -121,7 +129,7 @@ async def verify_payment(
             delivery_latitude=lat,    
             delivery_longitude=lon,
             
-            # Default visibility (Visible to both initially)
+            # Default visibility
             visible_to_customer=True,
             visible_to_owner=True
         )
@@ -396,7 +404,44 @@ async def complete_delivery_with_otp(
 
 
 # -----------------------------------------------------------------------------
-# 10. DELETE ORDER (CUSTOMER) - 👻 SOFT DELETE
+# 10. DRIVER: SHARE LOCATION 🚀 (NEW)
+# -----------------------------------------------------------------------------
+@router.post("/{order_id}/driver-location")
+async def update_driver_location(
+    order_id: int,
+    update: DriverUpdate,
+    db: AsyncSession = Depends(database.get_db)
+):
+    # 1. BROADCAST TO WEB PAGE (Live Map & Text)
+    tracking_data = {
+        "event": "DRIVER_UPDATE",
+        "order_id": order_id,
+        "lat": update.latitude,
+        "lng": update.longitude,
+        "distance": update.distance_text,
+        "time": update.time_text,
+        "message": update.message
+    }
+    await manager.broadcast(tracking_data)
+
+    # 2. SEND SMS (Only if there is a written message)
+    if update.message:
+        result = await db.execute(
+            select(models.Order)
+            .filter(models.Order.id == order_id)
+            .options(selectinload(models.Order.customer))
+        )
+        order = result.scalars().first()
+        
+        if order and order.customer.phone_number:
+            print(f"📩 Sending SMS: {update.message}")
+            send_sms(order.customer.phone_number, f"Driver Update: {update.message}")
+
+    return {"status": "Location shared"}
+
+
+# -----------------------------------------------------------------------------
+# 11. DELETE ORDER (CUSTOMER) - 👻 SOFT DELETE
 # -----------------------------------------------------------------------------
 @router.delete("/{order_id}/customer")
 async def delete_order_customer(
@@ -423,7 +468,7 @@ async def delete_order_customer(
     return {"status": "success", "message": "Order removed from history"}
 
 # -----------------------------------------------------------------------------
-# 11. DELETE ORDER (OWNER) - 👻 SOFT DELETE
+# 12. DELETE ORDER (OWNER) - 👻 SOFT DELETE
 # -----------------------------------------------------------------------------
 @router.delete("/{order_id}/owner")
 async def delete_order_owner(

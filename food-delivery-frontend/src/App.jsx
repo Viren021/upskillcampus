@@ -7,6 +7,8 @@ import OrderTracking from './pages/OrderTracking'
 import OwnerDashboard from './pages/OwnerDashboard'
 import Signup from './pages/Signup'
 import OrderHistory from './pages/OrderHistory'
+import AddMenu from './pages/AddMenu'
+import DriverDashboard from './pages/DriverDashboard'
 
 function App() {
   return (
@@ -19,6 +21,8 @@ function App() {
       <Route path="/my-orders" element={<OrderHistory />} />
       <Route path="/tracking" element={<OrderTracking />} />
       <Route path="/owner" element={<OwnerDashboard />} />
+      <Route path="/add-menu" element={<AddMenu />} />
+      <Route path="/driver" element={<DriverDashboard />} />
     </Routes>
   )
 }

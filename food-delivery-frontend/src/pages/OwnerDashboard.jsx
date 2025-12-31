@@ -115,7 +115,14 @@ function OwnerDashboard() {
                 <h1 style={{ margin: '0 0 10px 0' }}>👨‍🍳 Dashboard</h1>
                 <p style={{ color: '#666', margin: 0 }}>Managing: <strong>{stats?.restaurant || "Loading..."}</strong></p>
             </div>
-            
+
+            <button 
+                className="btn btn-primary" 
+                style={{ marginRight: '10px' }}
+                onClick={() => navigate('/add-menu')}
+                >
+                ➕ Add New Item
+            </button>
             <button 
                 onClick={handleLogout}
                 className="btn"

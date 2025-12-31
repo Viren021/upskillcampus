@@ -43,15 +43,19 @@ function OrderTracking() {
   const [driverPos, setDriverPos] = useState(null)
   const [roadPath, setRoadPath] = useState([]) 
   
+  // Driver Updates
+  const [driverMsg, setDriverMsg] = useState(null) // 👈 Stores text message
+  const [eta, setEta] = useState(null)             // 👈 Stores ETA
+
   // Animation Ref
   const indexRef = useRef(0)
 
   // OTP State
   const [showOtpModal, setShowOtpModal] = useState(false)
   const [otpInput, setOtpInput] = useState("")
-  // ❌ REMOVED: const [generatedOtp, setGeneratedOtp] = useState(null)
 
   const [loading, setLoading] = useState(true)
+  const ws = useRef(null)
 
   // 1. Fetch Order Data
   const fetchOrderData = async () => {
@@ -76,7 +80,7 @@ function OrderTracking() {
     }
   }
 
-  // 2. Fetch Route
+  // 2. Fetch Route (Initial Static Path)
   const fetchRoadRoute = async (start, end) => {
       try {
           const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`
@@ -85,14 +89,13 @@ function OrderTracking() {
       } catch (error) { console.error("OSRM Error", error) }
   }
 
-  // 3. Trigger OTP Generation (Called when car arrives)
+  // 3. Trigger OTP Generation
   const handleArrival = async () => {
       if (showOtpModal) return; 
       console.log("📍 Car Arrived! Generating OTP...")
       
       try {
         const token = localStorage.getItem('token')
-        // We just call the API. It sends the SMS. It does NOT return the code.
         await axios.post(`http://127.0.0.1:8000/orders/${orderId}/generate-otp`, {}, {
             headers: { Authorization: `Bearer ${token}` }
         })
@@ -120,14 +123,39 @@ function OrderTracking() {
   // Initial Load & WebSocket
   useEffect(() => {
     fetchOrderData()
-    const ws = new WebSocket("ws://127.0.0.1:8000/ws/tracking")
-    ws.onmessage = (e) => { 
+    
+    // 👇 SAFER WEBSOCKET CONNECTION
+    const socket = new WebSocket("ws://127.0.0.1:8000/ws/tracking");
+    ws.current = socket;
+
+    socket.onopen = () => {
+        console.log("✅ WebSocket Connected");
+    };
+
+    socket.onmessage = (e) => { 
         try {
             const d = JSON.parse(e.data); 
             if (d.status) setStatus(d.status); 
-        } catch(err) {}
+            if (d.event === "DRIVER_UPDATE") {
+                if (d.lat && d.lng) setDriverPos([d.lat, d.lng]) 
+                if (d.time) setEta(d.time)                       
+                if (d.message) setDriverMsg(d.message)           
+            }
+        } catch(err) {
+            console.log("WS Error:", err);
+        }
     }
-    return () => { if (ws.readyState === 1) ws.close() }
+
+    socket.onclose = () => {
+        console.log("❌ WebSocket Disconnected");
+    };
+
+    // Cleanup: Only close if open
+    return () => { 
+        if (socket.readyState === 1) { // 1 = OPEN
+            socket.close();
+        }
+    }
   }, [])
 
   // Trigger Route Fetch
@@ -136,22 +164,23 @@ function OrderTracking() {
   }, [restaurantPos, customerPos])
 
 
-  // 5. 🕹️ ANIMATION LOGIC (Slow Car + OTP Trigger)
+  
+  // 5. 🕹️ ANIMATION LOGIC (Fixed)
   useEffect(() => {
-    if (!restaurantPos) return;
+    if (!restaurantPos) return; // 👈 Removed "|| driverPos" check
 
     let interval;
 
     if (status === 'OUT_FOR_DELIVERY' && roadPath.length > 0) {
         
+        console.log("🚗 Starting Animation..."); // Debug Log
+
         interval = setInterval(() => {
             const currentIndex = indexRef.current;
 
             if (currentIndex >= roadPath.length - 1) {
                 clearInterval(interval); 
                 setDriverPos(roadPath[roadPath.length - 1]);
-                
-                // 👇 TRIGGER OTP MODAL WHEN ARRIVED
                 handleArrival(); 
                 return;
             }
@@ -159,19 +188,20 @@ function OrderTracking() {
             setDriverPos(roadPath[currentIndex]);
             indexRef.current += 1; 
 
-        }, 800); // 👈 SPEED: 800ms (Slow)
+        }, 800); // 800ms speed
 
     } else if (status === 'DELIVERED' && customerPos) {
         setDriverPos(customerPos)
         setShowOtpModal(false) 
         if (interval) clearInterval(interval)
     } else {
+        // Reset to Restaurant if not started yet
         setDriverPos(restaurantPos)
         indexRef.current = 0;
     }
 
     return () => clearInterval(interval);
-  }, [status, roadPath, restaurantPos, customerPos])
+  }, [status, roadPath, restaurantPos, customerPos]) // Removed driverPos from dependencies (if it was there)
 
 
   if (loading) return <div style={{textAlign:'center', padding:'50px'}}>Loading Map... 🛰️</div>
@@ -180,13 +210,22 @@ function OrderTracking() {
   return (
     <div style={{ minHeight: '100vh', background: '#f8f9fa' }}>
       <Navbar role="CUSTOMER" />
-      <div className="container" style={{position: 'relative'}}>
+      <div className="container" style={{position: 'relative', marginTop: '20px'}}>
         
+        {/* 🔔 DRIVER MESSAGE ALERT */}
+        {driverMsg && (
+            <div className="alert alert-info" style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                🔔 Message from Driver: "{driverMsg}"
+            </div>
+        )}
+
+        {/* ⏱️ ETA STATUS BAR */}
         <div className="card" style={{ marginBottom: '20px', textAlign: 'center', borderLeft: `5px solid ${status === 'DELIVERED' ? 'green' : 'orange'}` }}>
             <h2 style={{ margin: 0, textTransform: 'uppercase', color: '#333' }}>
                 {status.replace(/_/g, ' ')}
             </h2>
             <p style={{ color: '#666' }}>Order #{orderId}</p>
+            {eta && <p style={{ fontWeight: 'bold', color: '#007bff' }}>⏱️ Estimated Arrival: {eta}</p>}
         </div>
 
         {/* 🗺️ MAP */}
@@ -194,17 +233,26 @@ function OrderTracking() {
             {restaurantPos && (
             <MapContainer center={restaurantPos} zoom={13} style={{ height: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <Marker position={restaurantPos} icon={restaurantIcon} />
-                {customerPos && <Marker position={customerPos} icon={homeIcon} />}
+                <Marker position={restaurantPos} icon={restaurantIcon}><Popup>Restaurant</Popup></Marker>
+                
+                {customerPos && <Marker position={customerPos} icon={homeIcon}><Popup>Your Home</Popup></Marker>}
+                
+                {/* 🛵 DRIVER MARKER */}
                 {driverPos && (status === 'OUT_FOR_DELIVERY' || status === 'DELIVERED') && (
-                    <Marker position={driverPos} icon={scooterIcon} />
+                    <Marker position={driverPos} icon={scooterIcon}>
+                        <Popup>
+                            Driver is here! <br/>
+                            {eta ? `Arriving in ${eta}` : 'On the way'}
+                        </Popup>
+                    </Marker>
                 )}
+                
                 {roadPath.length > 0 && <Polyline positions={roadPath} color="blue" weight={5} opacity={0.7} />}
             </MapContainer>
             )}
         </div>
 
-        {/* 🔐 OTP POPUP MODAL (Secure Version) */}
+        {/* 🔐 OTP POPUP MODAL */}
         {showOtpModal && (
             <div style={{
                 position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
@@ -214,8 +262,6 @@ function OrderTracking() {
                     <h3>📭 Delivery Arrived!</h3>
                     <p>Please enter the OTP sent to your registered mobile number.</p>
                     
-                    {/* ❌ REMOVED DEMO HELPER - Must check real phone now */}
-
                     <input 
                         type="text" 
                         maxLength="4"
