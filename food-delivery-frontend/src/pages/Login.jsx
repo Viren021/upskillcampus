@@ -13,22 +13,25 @@ function Login() {
       formData.append('username', email)
       formData.append('password', password)
 
-      // Calls the Async Backend
-      const response = await axios.post('http://127.0.0.1:8000/login', formData)
+      // Calls the Backend
+      const response = await axios.post('http://127.0.0.1:8000/auth/login', formData)
       
-      //  DEBUG: See what the backend actually sent
+      // DEBUG: See what the backend actually sent
       console.log("Login Success! Role from Server:", response.data.role)
 
       // Save Token & Role
       localStorage.setItem('token', response.data.access_token)
       localStorage.setItem('role', response.data.role)
 
-      // Redirect based on Role
-      
+      // 👇 UPDATED REDIRECT LOGIC
       if (response.data.role === "OWNER") {
-        window.location.href = '/owner' 
-      } else {
-        window.location.href = '/'
+        navigate('/owner') 
+      } 
+      else if (response.data.role === "DRIVER") {
+        navigate('/driver') // 👈 Send Drivers to their app
+      } 
+      else {
+        navigate('/') // Customers go to Home
       }
 
     } catch (error) {
@@ -78,7 +81,6 @@ function Login() {
     </div>
   )
 }
-
 
 const styles = {
   container: {

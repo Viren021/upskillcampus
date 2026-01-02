@@ -1,27 +1,23 @@
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles  # 👈 1. IMPORT THIS
-import os # 👈 2. IMPORT THIS
+from fastapi.staticfiles import StaticFiles
+import os
 
+# Internal Imports
+from . import models, database
 from app.socket_manager import manager
 
-# 1. Imports with Alias
-from . import models, schemas, database, auth as auth_utils
-from .routers import auth as auth_router, orders, restaurants, users, menu, analytics
+# Import Routers
+from .routers import auth, orders, restaurants, users, menu, analytics
 
 app = FastAPI(title="Food Delivery API")
 
 # ---------------------------------------------------------
-# 📸 STATIC FILES SETUP (For Image Uploads)
+# 1. 📸 STATIC FILES SETUP (For Image Uploads)
 # ---------------------------------------------------------
-# A. Create folder if it doesn't exist
 if not os.path.exists("app/uploads"):
     os.makedirs("app/uploads")
 
-# B. Mount the folder
 # Access images via: http://127.0.0.1:8000/static/filename.jpg
 app.mount("/static", StaticFiles(directory="app/uploads"), name="static")
 
@@ -29,98 +25,59 @@ app.mount("/static", StaticFiles(directory="app/uploads"), name="static")
 # ---------------------------------------------------------
 # 2. CORS (Allow Frontend Access)
 # ---------------------------------------------------------
-origins = [
-    "http://localhost:5173",    # React Dev Server
-    "http://127.0.0.1:5173",    # Alternative Localhost
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 👈 Allow ALL origins (Solves the error)
+    allow_origins=["*"],  # Allows all origins (e.g. localhost:5173)
     allow_credentials=True,
-    allow_methods=["*"],  # 👈 Allow ALL methods (POST, GET, OPTIONS, etc.)
-    allow_headers=["*"],  # 👈 Allow ALL headers (Content-Type, Auth, etc.)
+    allow_methods=["*"],  # Allows all methods (POST, GET, PATCH, DELETE)
+    allow_headers=["*"],  # Allows all headers (Authorization, Content-Type)
 )
 
+
 # ---------------------------------------------------------
-# 3. Connect the Routers
+# 3. 🛣️ CONNECT ROUTERS
 # ---------------------------------------------------------
-app.include_router(auth_router.router)
+
+# ✅ AUTH ROUTER (Critical Fix: Added prefix="/auth")
+# This matches the frontend call to: http://127.0.0.1:8000/auth/login
+app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+
+# Other Routers
 app.include_router(users.router)
 app.include_router(restaurants.router)
-app.include_router(menu.router)  # 👈 Make sure this is here
+app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(analytics.router)
 
-# Setup for Login
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+# ---------------------------------------------------------
+# 4. DATABASE STARTUP
+# ---------------------------------------------------------
 @app.on_event("startup")
 async def startup():
-    # This creates the tables in the database automatically
+    # Creates tables if they don't exist
     async with database.engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
 
+
+# ---------------------------------------------------------
+# 5. ROOT ENDPOINT
+# ---------------------------------------------------------
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Food Delivery Backend 🍕"}
-
-# ---------------------------------------------------------
-# --- AUTH ROUTES (Signup/Login) ---
-# ---------------------------------------------------------
-
-@app.post("/signup", response_model=schemas.UserOut)
-async def create_user(user: schemas.UserCreate, db: AsyncSession = Depends(database.get_db)):
-    result = await db.execute(select(models.User).filter(models.User.email == user.email))
-    db_user = result.scalars().first()
-    
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    hashed_pwd = auth_utils.get_password_hash(user.password)
-    
-    new_user = models.User(
-        email=user.email,
-        hashed_password=hashed_pwd,
-        phone_number=user.phone_number,
-        role=user.role
-    )
-    
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-    return new_user
-
-@app.post("/login", response_model=schemas.Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(database.get_db)):
-    result = await db.execute(select(models.User).filter(models.User.email == form_data.username))
-    user = result.scalars().first()
-
-    if not user or not auth_utils.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Add 'role' to the token payload so we can check it on the frontend easily
-    access_token = auth_utils.create_access_token(
-        data={"sub": user.email, "role": user.role, "user_id": user.id}
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer", "role": user.role}
+    return {"message": "✅ Server is running. Docs at /docs"}
 
 
 # ---------------------------------------------------------
-# 4. WEBSOCKET ENDPOINT (The Shared Listener)
+# 6. ⚡ WEBSOCKET ENDPOINT (Live Tracking)
 # ---------------------------------------------------------
 @app.websocket("/ws/tracking")
 async def websocket_endpoint(websocket: WebSocket):
-    print(f"👂 DEBUG: Main.py Manager ID: {id(manager)}")
-    #  Connects the user to the shared manager
+    # Connects the user to the shared manager
     await manager.connect(websocket)
     try:
         while True:
+            # Keep connection open to listen for messages
             await websocket.receive_text()
     except Exception:
         manager.disconnect(websocket)

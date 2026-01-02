@@ -24,9 +24,9 @@ function OwnerDashboard() {
 
       const config = { headers: { Authorization: `Bearer ${token}` } }
       
-      // 2. Fetch Analytics
+      // 2. Fetch from the NEW /dashboard endpoint
       try {
-        const statsReq = await axios.get('http://127.0.0.1:8000/analytics/peak-hours', config)
+        const statsReq = await axios.get('http://127.0.0.1:8000/analytics/dashboard', config)
         setStats(statsReq.data)
       } catch (err) {
         console.warn("Analytics loading failed", err)
@@ -72,7 +72,7 @@ function OwnerDashboard() {
       }
   }
 
-  // 👇 NEW: DELETE ORDER FUNCTION
+  // DELETE ORDER FUNCTION
   const handleDeleteOrder = async (orderId) => {
     if(!window.confirm("⚠️ Are you sure you want to delete this order record? This cannot be undone.")) return;
 
@@ -113,41 +113,60 @@ function OwnerDashboard() {
         <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
                 <h1 style={{ margin: '0 0 10px 0' }}>👨‍🍳 Dashboard</h1>
-                <p style={{ color: '#666', margin: 0 }}>Managing: <strong>{stats?.restaurant || "Loading..."}</strong></p>
+                <p style={{ color: '#666', margin: 0 }}>Active Session</p>
             </div>
 
-            <button 
-                className="btn btn-primary" 
-                style={{ marginRight: '10px' }}
-                onClick={() => navigate('/add-menu')}
+            <div>
+                {/* 👇 NEW BUTTON: Switch to Driver Mode */}
+                <button 
+                    className="btn" 
+                    style={{ marginRight: '10px', background: '#ffc107', color: '#000', fontWeight: 'bold' }}
+                    onClick={() => window.open('/driver','_blank')}
+                    >
+                    🛵 Driver Mode
+                </button>
+
+                <button 
+                    className="btn btn-primary" 
+                    style={{ marginRight: '10px' }}
+                    onClick={() => navigate('/add-menu')}
+                    >
+                    ➕ Add New Item
+                </button>
+                <button 
+                    onClick={handleLogout}
+                    className="btn"
+                    style={{ background: '#333', color: 'white' }}
                 >
-                ➕ Add New Item
-            </button>
-            <button 
-                onClick={handleLogout}
-                className="btn"
-                style={{ background: '#333', color: 'white' }}
-            >
-                Logout
-            </button>
+                    Logout
+                </button>
+            </div>
         </div>
 
         {/* KPI Cards */}
         <div className="grid-3" style={{ marginBottom: '40px' }}>
+          
           <div className="card" style={{ borderLeft: '5px solid var(--blue)' }}>
-            <h4 style={{ margin: 0, color: '#777', textTransform: 'uppercase', fontSize: '12px' }}>Total Orders</h4>
-            <h1 style={{ fontSize: '42px', margin: '10px 0', color: 'var(--secondary)' }}>{orders.length}</h1>
+            <h4 style={{ margin: 0, color: '#777', textTransform: 'uppercase', fontSize: '12px' }}>Total Lifetime Orders</h4>
+            <h1 style={{ fontSize: '42px', margin: '10px 0', color: 'var(--secondary)' }}>
+                {stats?.total_orders || 0}
+            </h1>
           </div>
+
           <div className="card" style={{ borderLeft: '5px solid var(--green)' }}>
             <h4 style={{ margin: 0, color: '#777', textTransform: 'uppercase', fontSize: '12px' }}>Total Revenue</h4>
             <h1 style={{ fontSize: '42px', margin: '10px 0', color: 'var(--green)' }}>
-               ₹{stats?.total_revenue || orders.reduce((sum, order) => sum + order.total_amount, 0)}
+               ₹{stats?.total_revenue || 0}
             </h1>
           </div>
+
           <div className="card" style={{ borderLeft: '5px solid var(--orange)' }}>
             <h4 style={{ margin: 0, color: '#777', textTransform: 'uppercase', fontSize: '12px' }}>Top Selling Item</h4>
-            <h3 style={{ margin: '15px 0', color: 'var(--orange)' }}>{stats?.top_item || "Calculating..."}</h3>
+            <h3 style={{ margin: '15px 0', color: 'var(--orange)' }}>
+                {stats?.top_selling_item || "No Sales Yet"}
+            </h3>
           </div>
+
         </div>
 
         {/* Live Orders Header */}
@@ -209,7 +228,7 @@ function OwnerDashboard() {
                     </span>
                     )}
 
-                    {/* 👇 NEW: DELETE BUTTON (Visible for ALL orders) */}
+                    {/* DELETE BUTTON */}
                     <button 
                         className="btn btn-sm btn-outline-danger" 
                         onClick={() => handleDeleteOrder(order.id)}

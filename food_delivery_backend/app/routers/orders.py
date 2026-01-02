@@ -404,14 +404,20 @@ async def complete_delivery_with_otp(
 
 
 # -----------------------------------------------------------------------------
-# 10. DRIVER: SHARE LOCATION 🚀 (NEW)
+# 10. DRIVER: SHARE LOCATION 🚀 (SECURED)
 # -----------------------------------------------------------------------------
 @router.post("/{order_id}/driver-location")
 async def update_driver_location(
     order_id: int,
     update: DriverUpdate,
-    db: AsyncSession = Depends(database.get_db)
+    db: AsyncSession = Depends(database.get_db),
+    # 👇 ADDED SECURITY: Must be logged in
+    current_user: models.User = Depends(auth.get_current_user) 
 ):
+    # 👇 ADDED SECURITY: Check Role
+    if current_user.role != "DRIVER" and current_user.role != "OWNER":
+        raise HTTPException(status_code=403, detail="Not authorized to share location")
+
     # 1. BROADCAST TO WEB PAGE (Live Map & Text)
     tracking_data = {
         "event": "DRIVER_UPDATE",

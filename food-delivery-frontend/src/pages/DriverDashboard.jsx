@@ -5,121 +5,139 @@ import Navbar from "../components/Navbar";
 
 function DriverDashboard() {
   const navigate = useNavigate();
-  
-  // State
   const [orderId, setOrderId] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("update"); // 'update' or 'status'
 
-  // 🔒 SECURITY CHECK (The Bouncer)
+  // Security Check
   useEffect(() => {
     const role = localStorage.getItem("role");
     if (role !== "DRIVER" && role !== "OWNER") {
-      alert("🚫 ACCESS DENIED: This page is for Drivers only.");
-      navigate("/"); // Kick them back to home
+      alert("🚫 ACCESS DENIED: Driver only.");
+      navigate("/");
     }
   }, [navigate]);
 
-  // 👇 FUNCTION TO SEND MESSAGE
   const sendUpdate = async (msgText) => {
-    if (!orderId) return alert("⚠️ Please enter the Active Order ID first.");
-    
+    if (!orderId) return alert("⚠️ Enter Order ID first.");
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
       await axios.post(`http://127.0.0.1:8000/orders/${orderId}/driver-location`, {
-        latitude: 19.0760,   // Mock GPS
+        latitude: 19.0760, 
         longitude: 72.8777,
-        distance_text: "2 km",
+        distance_text: "2 km", 
         time_text: "5 mins",
         message: msgText
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      }, { headers: { Authorization: `Bearer ${token}` } });
 
-      // Show success feedback
-      const successBanner = document.getElementById("success-banner");
-      successBanner.style.display = "block";
-      setTimeout(() => successBanner.style.display = "none", 3000);
+      // Show temporary success banner
+      const banner = document.getElementById("success-banner");
+      banner.style.top = "20px";
+      setTimeout(() => banner.style.top = "-100px", 3000);
       
       setMessage(""); 
     } catch (error) {
-      console.error(error);
       alert("❌ Failed. Check Order ID.");
     }
     setLoading(false);
   };
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#f4f7f6" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#eef2f5", paddingBottom: "50px" }}>
       <Navbar role="DRIVER" />
       
-      <div className="container" style={{ maxWidth: "480px", paddingTop: "20px" }}>
-        
-        {/* 🟢 Success Banner (Hidden by default) */}
-        <div id="success-banner" className="alert alert-success text-center shadow-sm" style={{ display: 'none', position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 999, width: '90%', maxWidth: '400px' }}>
-            ✅ Message Sent to Customer!
-        </div>
+      {/* 🟢 CSS to Hide Number Spinners */}
+      <style>
+        {`
+          /* Chrome, Safari, Edge, Opera */
+          input::-webkit-outer-spin-button,
+          input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          /* Firefox */
+          input[type=number] {
+            -moz-appearance: textfield;
+          }
+        `}
+      </style>
 
-        {/* 📱 Mobile App Card Style */}
-        <div className="card border-0 shadow-lg overflow-hidden" style={{ borderRadius: "20px" }}>
+      {/* 🟢 Success Animation Banner */}
+      <div id="success-banner" style={{
+          position: 'fixed', top: '-100px', left: '50%', transform: 'translateX(-50%)',
+          background: '#28a745', color: 'white', padding: '15px 30px', borderRadius: '50px',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.2)', transition: 'top 0.5s ease', zIndex: 9999, fontWeight: 'bold'
+      }}>
+        ✅ Update Sent!
+      </div>
+
+      <div className="container" style={{ maxWidth: "450px", marginTop: "30px" }}>
+        
+        {/* 📱 Main App Card */}
+        <div className="card border-0 shadow-lg" style={{ borderRadius: "25px", overflow: "hidden" }}>
           
-          {/* Header */}
-          <div className="card-header bg-dark text-white p-4 text-center">
-            <h4 className="mb-0">🛵 Delivery Console</h4>
-            <small className="text-white-50">Manage your active run</small>
+          {/* Header Section */}
+          <div style={{ background: "linear-gradient(135deg, #0d6efd, #0a58ca)", padding: "30px 20px", color: "white", textAlign: "center" }}>
+            <h3 style={{ fontWeight: "700", margin: 0 }}>🛵 Delivery Console</h3>
+            <p style={{ margin: "5px 0 0 0", opacity: 0.8, fontSize: "0.9rem" }}>Active Session</p>
           </div>
 
           <div className="card-body p-4">
             
-            {/* 1. Order ID Input (Big & Bold) */}
-            <div className="mb-4">
-                <label className="text-muted small fw-bold mb-1">ACTIVE ORDER ID</label>
+            {/* 1. Order Input */}
+            <label style={{ fontSize: "0.8rem", fontWeight: "bold", color: "#6c757d", letterSpacing: "1px" }}>ACTIVE ORDER ID</label>
+            <div className="input-group mb-4">
+                <span className="input-group-text bg-light border-0" style={{ fontSize: "1.5rem", color: "#0d6efd" }}>#</span>
                 <input 
                   type="number" 
-                  className="form-control form-control-lg text-center fw-bold text-primary" 
-                  style={{ fontSize: "2rem", height: "60px", borderRadius: "12px", border: "2px solid #e0e0e0" }}
-                  placeholder="#"
+                  className="form-control form-control-lg border-0 bg-light fw-bold" 
+                  placeholder="Enter ID"
                   value={orderId}
                   onChange={(e) => setOrderId(e.target.value)}
+                  style={{ fontSize: "1.5rem", color: "#333", borderRadius: "0 10px 10px 0" }}
                 />
             </div>
 
-            <hr className="my-4" style={{ opacity: 0.1 }} />
+            <hr style={{ borderColor: "#eee" }} />
 
-            {/* 2. Quick Actions (Chips) */}
-            <label className="text-muted small fw-bold mb-2">QUICK UPDATES</label>
-            <div className="d-grid gap-2 mb-3">
-                <button className="btn btn-outline-primary py-2 fw-bold" style={{borderRadius: '10px'}} onClick={() => sendUpdate("I have arrived at the restaurant 🏢")}>
-                    🏢 Arrived at Restaurant
+            {/* 2. Quick Actions - STACKED LAYOUT */}
+            <label style={{ fontSize: "0.8rem", fontWeight: "bold", color: "#6c757d", letterSpacing: "1px", marginBottom: "15px", display: "block" }}>QUICK UPDATES</label>
+            
+            <div className="d-grid gap-3">
+                <button className="btn btn-outline-primary btn-lg shadow-sm" style={{ borderRadius: "12px", textAlign: "left", padding: "15px", border: "2px solid #0d6efd" }} 
+                    onClick={() => sendUpdate("I have arrived at the restaurant 🏢")}>
+                    <span style={{ marginRight: "10px" }}>🏢</span> Arrived at Restaurant
                 </button>
-                <button className="btn btn-outline-success py-2 fw-bold" style={{borderRadius: '10px'}} onClick={() => sendUpdate("Food picked up! On my way 🥡")}>
-                    🥡 Food Picked Up
+
+                <button className="btn btn-outline-warning btn-lg shadow-sm text-dark" style={{ borderRadius: "12px", textAlign: "left", padding: "15px", border: "2px solid #ffc107" }} 
+                    onClick={() => sendUpdate("Food picked up! On my way 🥡")}>
+                    <span style={{ marginRight: "10px" }}>🥡</span> Food Picked Up
                 </button>
-                <button className="btn btn-outline-danger py-2 fw-bold" style={{borderRadius: '10px'}} onClick={() => sendUpdate("I am outside your location 📍")}>
-                    📍 I've Arrived at Drop-off
+
+                <button className="btn btn-outline-success btn-lg shadow-sm" style={{ borderRadius: "12px", textAlign: "left", padding: "15px", border: "2px solid #198754" }} 
+                    onClick={() => sendUpdate("I've arrived at drop-off location 📍")}>
+                    <span style={{ marginRight: "10px" }}>📍</span> Arrived at Customer
                 </button>
             </div>
 
             {/* 3. Custom Message */}
             <div className="mt-4">
-                <label className="text-muted small fw-bold mb-2">CUSTOM MESSAGE</label>
+                <label style={{ fontSize: "0.8rem", fontWeight: "bold", color: "#6c757d", letterSpacing: "1px", marginBottom: "10px", display: "block" }}>CUSTOM MESSAGE</label>
                 <div className="input-group">
                     <input 
                         type="text" 
-                        className="form-control"
-                        placeholder="Type message..."
+                        className="form-control form-control-lg border-secondary"
+                        placeholder="Type a message..."
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
-                        style={{ borderRadius: "10px 0 0 10px", border: "1px solid #ced4da" }}
+                        style={{ borderRadius: "30px 0 0 30px", fontSize: "1rem", borderRight: "none" }}
                     />
                     <button 
                         className="btn btn-dark" 
-                        type="button" 
                         onClick={() => sendUpdate(message)}
                         disabled={loading || !message}
-                        style={{ borderRadius: "0 10px 10px 0", paddingLeft: "20px", paddingRight: "20px" }}
+                        style={{ borderRadius: "0 30px 30px 0", paddingLeft: "20px", paddingRight: "20px" }}
                     >
                         ➤
                     </button>
@@ -127,13 +145,14 @@ function DriverDashboard() {
             </div>
 
           </div>
-          
-          {/* Footer Status */}
-          <div className="card-footer bg-light text-center p-3">
-              <span className="badge bg-success dot">●</span> GPS Tracking Active
-          </div>
-        </div>
 
+          {/* Footer Status */}
+          <div className="bg-light p-3 text-center border-top">
+              <span style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#28a745", borderRadius: "50%", marginRight: "8px" }}></span>
+              <span style={{ fontSize: "0.9rem", color: "#666", fontWeight: "500" }}>GPS Tracking Active</span>
+          </div>
+
+        </div>
       </div>
     </div>
   );
