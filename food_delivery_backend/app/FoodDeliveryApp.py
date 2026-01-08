@@ -27,10 +27,10 @@ app.mount("/static", StaticFiles(directory="app/uploads"), name="static")
 # ---------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins (e.g. localhost:5173)
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (POST, GET, PATCH, DELETE)
-    allow_headers=["*"],  # Allows all headers (Authorization, Content-Type)
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 
@@ -38,11 +38,9 @@ app.add_middleware(
 # 3. 🛣️ CONNECT ROUTERS
 # ---------------------------------------------------------
 
-# ✅ AUTH ROUTER (Critical Fix: Added prefix="/auth")
-# This matches the frontend call to: http://127.0.0.1:8000/auth/login
+
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 
-# Other Routers
 app.include_router(users.router)
 app.include_router(restaurants.router)
 app.include_router(menu.router)
