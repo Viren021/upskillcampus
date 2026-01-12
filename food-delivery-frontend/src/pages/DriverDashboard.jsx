@@ -7,6 +7,7 @@ function DriverDashboard() {
   const navigate = useNavigate();
   const [orderId, setOrderId] = useState("");
   const [message, setMessage] = useState("");
+  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Security Check
@@ -18,6 +19,7 @@ function DriverDashboard() {
     }
   }, [navigate]);
 
+  // 1. Send Location/Status Update
   const sendUpdate = async (msgText) => {
     if (!orderId) return alert("⚠️ Enter Order ID first.");
     setLoading(true);
@@ -26,15 +28,16 @@ function DriverDashboard() {
       await axios.post(`http://127.0.0.1:8000/orders/${orderId}/driver-location`, {
         latitude: 19.0760, 
         longitude: 72.8777,
-        distance_text: "2 km", 
-        time_text: "5 mins",
+        distance_text: "0 km", 
+        time_text: "0 mins",
         message: msgText
       }, { headers: { Authorization: `Bearer ${token}` } });
 
-      // Show temporary success banner
-      const banner = document.getElementById("success-banner");
-      banner.style.top = "20px";
-      setTimeout(() => banner.style.top = "-100px", 3000);
+      // Show temporary toast/alert
+      const banner = document.getElementById("status-msg");
+      banner.style.opacity = "1";
+      banner.innerText = `✅ Update Sent: "${msgText}"`;
+      setTimeout(() => banner.style.opacity = "0", 3000);
       
       setMessage(""); 
     } catch (error) {
@@ -43,114 +46,177 @@ function DriverDashboard() {
     setLoading(false);
   };
 
+  // 2. 🔐 Verify OTP & Complete Delivery
+  const completeDelivery = async () => {
+    if (!orderId || otp.length !== 4) return alert("⚠️ Enter Valid Order ID and 4-digit OTP.");
+    
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(`http://127.0.0.1:8000/orders/${orderId}/complete-delivery`, 
+        { otp: otp }, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      alert("🎉 DELIVERY SUCCESSFUL! Great job.");
+      setOtp("");
+      setOrderId(""); 
+      window.location.reload(); 
+    } catch (error) {
+      console.error(error);
+      alert("❌ INVALID OTP. Please ask customer again.");
+    }
+  };
+
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#eef2f5", paddingBottom: "50px" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg-color)" }}>
       <Navbar role="DRIVER" />
       
-      {/* 🟢 CSS to Hide Number Spinners */}
-      <style>
-        {`
-          /* Chrome, Safari, Edge, Opera */
-          input::-webkit-outer-spin-button,
-          input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-          }
-          /* Firefox */
-          input[type=number] {
-            -moz-appearance: textfield;
-          }
-        `}
-      </style>
+      {/* 🟢 CSS Reset for Inputs just for this page to match theme */}
+      <style>{`
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .form-input:focus {
+            border-color: var(--primary);
+        }
+        .status-btn {
+            background: #fff;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            color: var(--secondary);
+        }
+        .status-btn:hover {
+            background: #f1f1f1;
+            border-color: #ccc;
+        }
+      `}</style>
 
-      {/* 🟢 Success Animation Banner */}
-      <div id="success-banner" style={{
-          position: 'fixed', top: '-100px', left: '50%', transform: 'translateX(-50%)',
-          background: '#28a745', color: 'white', padding: '15px 30px', borderRadius: '50px',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.2)', transition: 'top 0.5s ease', zIndex: 9999, fontWeight: 'bold'
-      }}>
-        ✅ Update Sent!
-      </div>
-
-      <div className="container" style={{ maxWidth: "450px", marginTop: "30px" }}>
+      <div className="container" style={{ marginTop: "40px", paddingBottom: "40px" }}>
         
-        {/* 📱 Main App Card */}
-        <div className="card border-0 shadow-lg" style={{ borderRadius: "25px", overflow: "hidden" }}>
-          
-          {/* Header Section */}
-          <div style={{ background: "linear-gradient(135deg, #0d6efd, #0a58ca)", padding: "30px 20px", color: "white", textAlign: "center" }}>
-            <h3 style={{ fontWeight: "700", margin: 0 }}>🛵 Delivery Console</h3>
-            <p style={{ margin: "5px 0 0 0", opacity: 0.8, fontSize: "0.9rem" }}>Active Session</p>
-          </div>
-
-          <div className="card-body p-4">
+        {/* Centered Card Layout */}
+        <div className="card" style={{ maxWidth: "500px", margin: "0 auto", padding: "30px" }}>
             
-            {/* 1. Order Input */}
-            <label style={{ fontSize: "0.8rem", fontWeight: "bold", color: "#6c757d", letterSpacing: "1px" }}>ACTIVE ORDER ID</label>
-            <div className="input-group mb-4">
-                <span className="input-group-text bg-light border-0" style={{ fontSize: "1.5rem", color: "#0d6efd" }}>#</span>
-                <input 
-                  type="number" 
-                  className="form-control form-control-lg border-0 bg-light fw-bold" 
-                  placeholder="Enter ID"
-                  value={orderId}
-                  onChange={(e) => setOrderId(e.target.value)}
-                  style={{ fontSize: "1.5rem", color: "#333", borderRadius: "0 10px 10px 0" }}
-                />
+            {/* Header */}
+            <div style={{ textAlign: "center", marginBottom: "30px" }}>
+                <h2 style={{ margin: "0", color: "var(--secondary)" }}>🛵 Driver Console</h2>
+                <p style={{ color: "#777", fontSize: "14px", marginTop: "5px" }}>Manage your active delivery</p>
+                
+                {/* Status Toast Message */}
+                <div id="status-msg" style={{ 
+                    marginTop: "10px", padding: "8px", background: "#d4edda", 
+                    color: "#155724", borderRadius: "6px", fontSize: "13px", 
+                    opacity: 0, transition: "opacity 0.3s" 
+                }}>
+                    Ready...
+                </div>
             </div>
 
-            <hr style={{ borderColor: "#eee" }} />
-
-            {/* 2. Quick Actions - STACKED LAYOUT */}
-            <label style={{ fontSize: "0.8rem", fontWeight: "bold", color: "#6c757d", letterSpacing: "1px", marginBottom: "15px", display: "block" }}>QUICK UPDATES</label>
-            
-            <div className="d-grid gap-3">
-                <button className="btn btn-outline-primary btn-lg shadow-sm" style={{ borderRadius: "12px", textAlign: "left", padding: "15px", border: "2px solid #0d6efd" }} 
-                    onClick={() => sendUpdate("I have arrived at the restaurant 🏢")}>
-                    <span style={{ marginRight: "10px" }}>🏢</span> Arrived at Restaurant
-                </button>
-
-                <button className="btn btn-outline-warning btn-lg shadow-sm text-dark" style={{ borderRadius: "12px", textAlign: "left", padding: "15px", border: "2px solid #ffc107" }} 
-                    onClick={() => sendUpdate("Food picked up! On my way 🥡")}>
-                    <span style={{ marginRight: "10px" }}>🥡</span> Food Picked Up
-                </button>
-
-                <button className="btn btn-outline-success btn-lg shadow-sm" style={{ borderRadius: "12px", textAlign: "left", padding: "15px", border: "2px solid #198754" }} 
-                    onClick={() => sendUpdate("I've arrived at drop-off location 📍")}>
-                    <span style={{ marginRight: "10px" }}>📍</span> Arrived at Customer
-                </button>
-            </div>
-
-            {/* 3. Custom Message */}
-            <div className="mt-4">
-                <label style={{ fontSize: "0.8rem", fontWeight: "bold", color: "#6c757d", letterSpacing: "1px", marginBottom: "10px", display: "block" }}>CUSTOM MESSAGE</label>
+            {/* 1. Active Order ID Section */}
+            <div style={{ marginBottom: "25px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", color: "#888", marginBottom: "5px", display: "block" }}>
+                    Active Order ID
+                </label>
                 <div className="input-group">
+                    <span style={{ display: "flex", alignItems: "center", padding: "0 15px", background: "#eee", borderRadius: "8px", fontWeight: "bold", color: "#555" }}>#</span>
                     <input 
-                        type="text" 
-                        className="form-control form-control-lg border-secondary"
-                        placeholder="Type a message..."
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        style={{ borderRadius: "30px 0 0 30px", fontSize: "1rem", borderRight: "none" }}
+                        type="number" 
+                        className="form-input" 
+                        placeholder="Enter Order ID (e.g. 24)"
+                        value={orderId}
+                        onChange={(e) => setOrderId(e.target.value)}
                     />
-                    <button 
-                        className="btn btn-dark" 
-                        onClick={() => sendUpdate(message)}
-                        disabled={loading || !message}
-                        style={{ borderRadius: "0 30px 30px 0", paddingLeft: "20px", paddingRight: "20px" }}
-                    >
-                        ➤
+                </div>
+            </div>
+
+            {/* 2. Quick Status Updates */}
+            <div style={{ marginBottom: "30px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", color: "#888", marginBottom: "10px", display: "block" }}>
+                    Update Status
+                </label>
+                <div style={{ display: "grid", gap: "10px" }}>
+                    <button className="status-btn" onClick={() => sendUpdate("I have arrived at the restaurant 🏢")}>
+                        🏢 <span>Arrived at Restaurant</span>
+                    </button>
+                    <button className="status-btn" onClick={() => sendUpdate("Food picked up! On my way 🥡")}>
+                        🥡 <span>Food Picked Up</span>
+                    </button>
+                    <button className="status-btn" onClick={() => sendUpdate("I've arrived at drop-off location 📍")}>
+                        📍 <span>Arrived at Customer</span>
                     </button>
                 </div>
             </div>
 
-          </div>
+            {/* 3. Secure Handover (Clean OTP Section) */}
+            <div style={{ background: "#f8f9fa", border: "1px dashed #ccc", borderRadius: "12px", padding: "20px", textAlign: "center", marginBottom: "25px" }}>
+                <h4 style={{ margin: "0 0 10px 0", color: "var(--primary)" }}>🔐 Secure Handover</h4>
+                <p style={{ fontSize: "13px", color: "#666", marginBottom: "15px" }}>
+                    Ask customer for the 4-digit code
+                </p>
 
-          {/* Footer Status */}
-          <div className="bg-light p-3 text-center border-top">
-              <span style={{ display: "inline-block", width: "10px", height: "10px", backgroundColor: "#28a745", borderRadius: "50%", marginRight: "8px" }}></span>
-              <span style={{ fontSize: "0.9rem", color: "#666", fontWeight: "500" }}>GPS Tracking Active</span>
-          </div>
+                <input 
+                    type="text" 
+                    maxLength="4"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="0 0 0 0"
+                    style={{ 
+                        width: "100%", padding: "15px", fontSize: "20px", textAlign: "center", 
+                        letterSpacing: "8px", fontWeight: "bold", border: "1px solid #ccc", 
+                        borderRadius: "8px", marginBottom: "15px", outline: "none"
+                    }}
+                />
+
+                <button 
+                    className="btn btn-success btn-block" 
+                    onClick={completeDelivery}
+                    disabled={otp.length !== 4}
+                    style={{ opacity: otp.length === 4 ? 1 : 0.6 }}
+                >
+                    VERIFY & COMPLETE DELIVERY
+                </button>
+            </div>
+
+            {/* 4. Custom Message */}
+            <div>
+                <label style={{ fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", color: "#888", marginBottom: "5px", display: "block" }}>
+                    Custom Message
+                </label>
+                <div style={{ display: "flex", gap: "10px" }}>
+                    <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="Traffic / Delay..."
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                    />
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={() => sendUpdate(message)}
+                        disabled={loading || !message}
+                    >
+                        SEND
+                    </button>
+                </div>
+            </div>
 
         </div>
       </div>

@@ -18,7 +18,7 @@ from app.socket_manager import manager
 from app.utils import send_sms  
 
 # --- CONFIGURATION ---
-RAZORPAY_KEY_ID = "your_razorpay_key_id"
+RAZORPAY_KEY_ID = "use_your_razorpay_key_id"
 RAZORPAY_KEY_SECRET = "your_razorpay_key_secret"
 
 client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))

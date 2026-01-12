@@ -44,15 +44,15 @@ function OrderTracking() {
   const [roadPath, setRoadPath] = useState([]) 
   
   // Driver Updates
-  const [driverMsg, setDriverMsg] = useState(null) // 👈 Stores text message
-  const [eta, setEta] = useState(null)             // 👈 Stores ETA
+  const [driverMsg, setDriverMsg] = useState(null) 
+  const [eta, setEta] = useState(null)             
 
   // Animation Ref
   const indexRef = useRef(0)
 
-  // OTP State
+  // OTP State (Display only)
   const [showOtpModal, setShowOtpModal] = useState(false)
-  const [otpInput, setOtpInput] = useState("")
+  const [otpCode, setOtpCode] = useState(null) // 👈 Changed from input to display code
 
   const [loading, setLoading] = useState(true)
   const ws = useRef(null)
@@ -89,34 +89,25 @@ function OrderTracking() {
       } catch (error) { console.error("OSRM Error", error) }
   }
 
-  // 3. Trigger OTP Generation
+  // 3. Trigger OTP Generation & Display
   const handleArrival = async () => {
       if (showOtpModal) return; 
-      console.log("📍 Car Arrived! Generating OTP...")
+      console.log("📍 Car Arrived! Fetching OTP...")
       
       try {
         const token = localStorage.getItem('token')
-        await axios.post(`http://127.0.0.1:8000/orders/${orderId}/generate-otp`, {}, {
+        // 👇 Call API to generate/fetch OTP
+        const res = await axios.post(`http://127.0.0.1:8000/orders/${orderId}/generate-otp`, {}, {
             headers: { Authorization: `Bearer ${token}` }
         })
-        setShowOtpModal(true)
+
+        // 👇 Save the OTP to display it to the customer
+        if(res.data.otp) {
+            setOtpCode(res.data.otp)
+            setShowOtpModal(true)
+        }
       } catch (err) {
           console.error("Failed to generate OTP", err)
-      }
-  }
-
-  // 4. Submit OTP
-  const handleVerifyOtp = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        await axios.post(`http://127.0.0.1:8000/orders/${orderId}/complete-delivery`, { otp: otpInput }, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
-        alert("✅ OTP Verified! Order Delivered.")
-        setShowOtpModal(false)
-        setStatus("DELIVERED") 
-      } catch (err) {
-        alert("❌ Invalid OTP! Try again.")
       }
   }
 
@@ -124,13 +115,10 @@ function OrderTracking() {
   useEffect(() => {
     fetchOrderData()
     
-    // 👇 SAFER WEBSOCKET CONNECTION
     const socket = new WebSocket("ws://127.0.0.1:8000/ws/tracking");
     ws.current = socket;
 
-    socket.onopen = () => {
-        console.log("✅ WebSocket Connected");
-    };
+    socket.onopen = () => console.log("✅ WebSocket Connected");
 
     socket.onmessage = (e) => { 
         try {
@@ -146,15 +134,10 @@ function OrderTracking() {
         }
     }
 
-    socket.onclose = () => {
-        console.log("❌ WebSocket Disconnected");
-    };
+    socket.onclose = () => console.log("❌ WebSocket Disconnected");
 
-    // Cleanup: Only close if open
     return () => { 
-        if (socket.readyState === 1) { // 1 = OPEN
-            socket.close();
-        }
+        if (socket.readyState === 1) socket.close();
     }
   }, [])
 
@@ -163,17 +146,15 @@ function OrderTracking() {
       if (restaurantPos && customerPos) fetchRoadRoute(restaurantPos, customerPos)
   }, [restaurantPos, customerPos])
 
-
-  
-  // 5. 🕹️ ANIMATION LOGIC (Fixed)
+  // 5. 🕹️ ANIMATION LOGIC
   useEffect(() => {
-    if (!restaurantPos) return; // 👈 Removed "|| driverPos" check
+    if (!restaurantPos) return; 
 
     let interval;
 
     if (status === 'OUT_FOR_DELIVERY' && roadPath.length > 0) {
         
-        console.log("🚗 Starting Animation..."); // Debug Log
+        console.log("🚗 Starting Animation..."); 
 
         interval = setInterval(() => {
             const currentIndex = indexRef.current;
@@ -188,20 +169,19 @@ function OrderTracking() {
             setDriverPos(roadPath[currentIndex]);
             indexRef.current += 1; 
 
-        }, 800); // 800ms speed
+        }, 800); 
 
     } else if (status === 'DELIVERED' && customerPos) {
         setDriverPos(customerPos)
         setShowOtpModal(false) 
         if (interval) clearInterval(interval)
     } else {
-        // Reset to Restaurant if not started yet
         setDriverPos(restaurantPos)
         indexRef.current = 0;
     }
 
     return () => clearInterval(interval);
-  }, [status, roadPath, restaurantPos, customerPos]) // Removed driverPos from dependencies (if it was there)
+  }, [status, roadPath, restaurantPos, customerPos]) 
 
 
   if (loading) return <div style={{textAlign:'center', padding:'50px'}}>Loading Map... 🛰️</div>
@@ -237,13 +217,9 @@ function OrderTracking() {
                 
                 {customerPos && <Marker position={customerPos} icon={homeIcon}><Popup>Your Home</Popup></Marker>}
                 
-                {/* 🛵 DRIVER MARKER */}
                 {driverPos && (status === 'OUT_FOR_DELIVERY' || status === 'DELIVERED') && (
                     <Marker position={driverPos} icon={scooterIcon}>
-                        <Popup>
-                            Driver is here! <br/>
-                            {eta ? `Arriving in ${eta}` : 'On the way'}
-                        </Popup>
+                        <Popup>Driver is here! <br/>{eta ? `Arriving in ${eta}` : 'On the way'}</Popup>
                     </Marker>
                 )}
                 
@@ -252,31 +228,28 @@ function OrderTracking() {
             )}
         </div>
 
-        {/* 🔐 OTP POPUP MODAL */}
-        {showOtpModal && (
+        {/* 🔐 OTP DISPLAY MODAL (Updated) */}
+        {showOtpModal && otpCode && (
             <div style={{
                 position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
                 background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
             }}>
                 <div style={{ background: 'white', padding: '30px', borderRadius: '10px', textAlign: 'center', width: '300px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
-                    <h3>📭 Delivery Arrived!</h3>
-                    <p>Please enter the OTP sent to your registered mobile number.</p>
+                    <h3 style={{ color: '#0d6efd' }}>📭 Driver Arrived!</h3>
+                    <p>Share this code with your driver to receive your food.</p>
                     
-                    <input 
-                        type="text" 
-                        maxLength="4"
-                        placeholder="- - - -"
-                        value={otpInput}
-                        onChange={(e) => setOtpInput(e.target.value)}
-                        style={{ fontSize: '24px', width: '100%', textAlign: 'center', letterSpacing: '5px', marginBottom: '20px', padding: '10px', borderRadius:'5px', border:'1px solid #ccc' }}
-                    />
+                    <div style={{ 
+                        fontSize: '40px', fontWeight: 'bold', letterSpacing: '5px', 
+                        color: '#333', background: '#f0f0f0', padding: '10px', borderRadius: '10px', margin: '20px 0' 
+                    }}>
+                        {otpCode}
+                    </div>
                     
                     <button 
-                        className="btn btn-success btn-block" 
-                        onClick={handleVerifyOtp}
-                        disabled={otpInput.length < 4}
+                        className="btn btn-outline-secondary btn-sm" 
+                        onClick={() => setShowOtpModal(false)}
                     >
-                        Confirm Delivery ✅
+                        Close
                     </button>
                 </div>
             </div>
